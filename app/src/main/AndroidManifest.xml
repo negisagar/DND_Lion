@@ -12,6 +12,8 @@
     <uses-permission android:name="android.permission.SEND_SMS"/>
     <uses-permission android:name="android.permission.READ_PHONE_STATE"/>
     <uses-permission android:name="android.permission.READ_CALL_LOG"/>
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+
 
     <application
         android:allowBackup="true"
@@ -41,14 +43,9 @@
             </intent-filter>
         </receiver>
 
-        <service
-            android:name=".MyCallScreeningService"
-            android:permission="android.permission.BIND_SCREENING_SERVICE"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.telecom.CallScreeningService"/>
-            </intent-filter>
-        </service>
+        <meta-data
+            android:name="preloaded_fonts"
+            android:resource="@array/preloaded_fonts" />
 
 
     </application>
