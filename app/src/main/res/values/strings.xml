@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">DND Lion</string>
+    <string name="schedule_dnd_mode">Schedule DND Mode</string>
+    <string name="start_time">Start Time</string>
+    <string name="end_time">End Time</string>
+    <string name="edit_sms_message">Edit SMS Message</string>
+    <string name="stop_dnd_mode">Stop DND Mode</string>
+    <string name="default_sms_message">User is in DND mode.</string>
+</resources>

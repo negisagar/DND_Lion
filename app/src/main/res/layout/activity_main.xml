@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:layout_margin="16dp"
+    android:padding="16dp"
+    app:cardCornerRadius="8dp"
+    tools:context=".MainActivity">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <com.google.android.material.textview.MaterialTextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/schedule_dnd_mode"
+            android:textAppearance="?attr/textAppearanceHeadline6"
+            android:textColor="#000000"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="24dp" />
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="@string/start_time"
+            android:layout_marginBottom="16dp">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/start_time_input"
+                android:layout_width="match_parent"
+                android:maxWidth="319dp"
+                android:layout_height="wrap_content"
+                android:inputType="none"
+                android:focusable="false"
+                android:clickable="true"
+                android:cursorVisible="false"
+                android:drawableEnd="@android:drawable/ic_lock_idle_alarm" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="@string/end_time"
+            android:layout_marginBottom="24dp">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/end_time_input"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:clickable="true"
+                android:cursorVisible="false"
+                android:drawableEnd="@android:drawable/ic_lock_idle_alarm"
+                android:focusable="false"
+                android:inputType="none"
+                android:maxWidth="319dp"
+                android:visibility="visible"
+                tools:visibility="visible" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="@string/edit_sms_message"
+            android:layout_marginBottom="24dp">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/sms_message_input"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:maxWidth="319dp" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/schedule_button"
+            android:layout_width="match_parent"
+            android:maxWidth="319dp"
+            android:layout_height="wrap_content"
+            android:text="@string/schedule_dnd_mode"
+            android:layout_marginBottom="16dp"
+            android:onClick="scheduleDndMode" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/stop_dnd_button"
+            android:layout_width="match_parent"
+            android:maxWidth="319dp"
+            android:layout_height="wrap_content"
+            android:text="@string/stop_dnd_mode"
+            android:onClick="stopDndMode" />
+
+    </LinearLayout>
+
+</com.google.android.material.card.MaterialCardView>
