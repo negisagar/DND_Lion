@@ -15,7 +15,6 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.timepicker.MaterialTimePicker
 import com.google.android.material.timepicker.TimeFormat
@@ -28,17 +27,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var smsMessageInput: TextInputEditText
     private lateinit var scheduleButton: Button
     private lateinit var stopDndButton: Button
-
-    private lateinit var buttonMon: MaterialButton
-    private lateinit var buttonTue: MaterialButton
-    private lateinit var buttonWed: MaterialButton
-    private lateinit var buttonThu: MaterialButton
-    private lateinit var buttonFri: MaterialButton
-    private lateinit var buttonSat: MaterialButton
-    private lateinit var buttonSun: MaterialButton
-
-    private val selectedDays = mutableSetOf<String>()
-
 
     private val permissions = arrayOf(
         Manifest.permission.RECEIVE_SMS,
@@ -53,7 +41,6 @@ class MainActivity : AppCompatActivity() {
         const val KEY_END_TIME = "END_TIME"
         const val KEY_SMS_MESSAGE = "SMS_MESSAGE"
         const val KEY_DND_ACTIVE = "DND_ACTIVE"
-        const val KEY_SELECTED_DAYS = "SELECTED_DAYS"
     }
 
     private fun loadDndPreferences() {
@@ -61,30 +48,6 @@ class MainActivity : AppCompatActivity() {
         startTimeInput.setText(sharedPreferences.getString(KEY_START_TIME, ""))
         endTimeInput.setText(sharedPreferences.getString(KEY_END_TIME, ""))
         smsMessageInput.setText(sharedPreferences.getString(KEY_SMS_MESSAGE, getString(R.string.default_sms_message)))
-
-        val savedDays = sharedPreferences.getStringSet(KEY_SELECTED_DAYS, setOf())
-        savedDays?.forEach { day ->
-            selectedDays.add(day)
-            when (day) {
-                "Mon" -> toggleButtonState(buttonMon, true)
-                "Tue" -> toggleButtonState(buttonTue, true)
-                "Wed" -> toggleButtonState(buttonWed, true)
-                "Thu" -> toggleButtonState(buttonThu, true)
-                "Fri" -> toggleButtonState(buttonFri, true)
-                "Sat" -> toggleButtonState(buttonSat, true)
-                "Sun" -> toggleButtonState(buttonSun, true)
-            }
-        }
-    }
-
-    private fun toggleButtonState(button: MaterialButton, isSelected: Boolean) {
-        if (isSelected) {
-            button.setBackgroundColor(ContextCompat.getColor(this, R.color.button_selected))
-            button.setTextColor(ContextCompat.getColor(this, R.color.button_normal)) // Adjust text color if needed
-        } else {
-            button.setBackgroundColor(ContextCompat.getColor(this, R.color.button_normal))
-            button.setTextColor(ContextCompat.getColor(this, R.color.white)) // Adjust text color if needed
-        }
     }
 
     private fun saveDndPreferences() {
@@ -93,19 +56,8 @@ class MainActivity : AppCompatActivity() {
         editor.putString(KEY_START_TIME, startTimeInput.text.toString())
         editor.putString(KEY_END_TIME, endTimeInput.text.toString())
         editor.putString(KEY_SMS_MESSAGE, smsMessageInput.text.toString())
-        editor.putStringSet(KEY_SELECTED_DAYS, selectedDays)
         editor.putBoolean(KEY_DND_ACTIVE, true)
         editor.apply()
-    }
-
-    private fun toggleDaySelection(day: String, button: MaterialButton) {
-        if (selectedDays.contains(day)) {
-            selectedDays.remove(day)
-            toggleButtonState(button, false)
-        } else {
-            selectedDays.add(day)
-            toggleButtonState(button, true)
-        }
     }
 
     private val requestCodePermissions = 1
@@ -119,23 +71,6 @@ class MainActivity : AppCompatActivity() {
         smsMessageInput = findViewById(R.id.sms_message_input)
         scheduleButton = findViewById(R.id.schedule_button)
         stopDndButton = findViewById(R.id.stop_dnd_button)
-
-        buttonMon = findViewById(R.id.button_mon)
-        buttonTue = findViewById(R.id.button_tue)
-        buttonWed = findViewById(R.id.button_wed)
-        buttonThu = findViewById(R.id.button_thu)
-        buttonFri = findViewById(R.id.button_fri)
-        buttonSat = findViewById(R.id.button_sat)
-        buttonSun = findViewById(R.id.button_sun)
-
-        // Add click listeners for day buttons
-        buttonMon.setOnClickListener { toggleDaySelection("Mon", buttonMon) }
-        buttonTue.setOnClickListener { toggleDaySelection("Tue", buttonTue) }
-        buttonWed.setOnClickListener { toggleDaySelection("Wed", buttonWed) }
-        buttonThu.setOnClickListener { toggleDaySelection("Thu", buttonThu) }
-        buttonFri.setOnClickListener { toggleDaySelection("Fri", buttonFri) }
-        buttonSat.setOnClickListener { toggleDaySelection("Sat", buttonSat) }
-        buttonSun.setOnClickListener { toggleDaySelection("Sun", buttonSun) }
 
         requestPermissions()
 
@@ -151,7 +86,6 @@ class MainActivity : AppCompatActivity() {
             saveDndPreferences()
         }
 
-        // Load preferences and update UI
         loadDndPreferences()
     }
 
@@ -192,7 +126,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun showTimePickerDialog(timeInput: TextInputEditText) {
         val picker = MaterialTimePicker.Builder()
-            .setTimeFormat(TimeFormat.CLOCK_12H) // This line was replaced to always use 12-hour format
+            .setTimeFormat(TimeFormat.CLOCK_12H)
             .setHour(12)
             .setMinute(0)
             .setTitleText("Select Time")
@@ -208,7 +142,6 @@ class MainActivity : AppCompatActivity() {
             timeInput.setText(formattedTime)
         }
     }
-
 
     private fun isNotificationPolicyAccessGranted(): Boolean {
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -238,8 +171,7 @@ class MainActivity : AppCompatActivity() {
             set(Calendar.SECOND, 0)
         }.timeInMillis
 
-        // Save schedule to shared preferences
-        val sharedPreferences = getSharedPreferences("DND_PREFS", Context.MODE_PRIVATE)
+        val sharedPreferences = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val editor = sharedPreferences.edit()
         editor.putInt("START_HOUR", getHour(startTimeInput.text.toString()))
         editor.putInt("START_MINUTE", getMinute(startTimeInput.text.toString()))
@@ -286,7 +218,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-
     private fun getHour(time: String): Int {
         val parts = time.split(" ", ":")
         var hour = parts[0].toInt()
@@ -304,10 +235,8 @@ class MainActivity : AppCompatActivity() {
         return parts[1].toInt()
     }
 
-
     fun stopDndMode(view: View) {
-        // Update DND status in shared preferences
-        val sharedPreferences = getSharedPreferences("DND_PREFS", Context.MODE_PRIVATE)
+        val sharedPreferences = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val editor = sharedPreferences.edit()
         editor.putBoolean("DND_ACTIVE", false)
         editor.apply()
