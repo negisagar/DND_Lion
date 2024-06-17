@@ -9,4 +9,5 @@
     <color name="button_normal">#6200EE</color>
     <color name="button_selected">#03DAC5</color>
     <color name="white">#FFFFFF</color>
+    <color name="black">#000000</color>
 </resources>
