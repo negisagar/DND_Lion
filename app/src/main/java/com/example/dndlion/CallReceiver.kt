@@ -1,5 +1,6 @@
 package com.example.dndlion
 
+import android.Manifest
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -8,94 +9,119 @@ import android.telephony.SmsManager
 import android.telephony.TelephonyManager
 import android.util.Log
 import androidx.core.content.ContextCompat
-import androidx.core.content.PermissionChecker
+import android.database.Cursor
+import android.os.Handler
+import android.os.Looper
+import android.content.pm.PackageManager
 
 class CallReceiver : BroadcastReceiver() {
+    private val TAG = "CallReceiver" // Consider moving to Constants.LogTags.CALL_RECEIVER
+
     override fun onReceive(context: Context, intent: Intent) {
-        val action = intent.action
-        if (action != null && action == TelephonyManager.ACTION_PHONE_STATE_CHANGED) {
-            val state = intent.getStringExtra(TelephonyManager.EXTRA_STATE)
-            Log.d("CallReceiver", "Phone state changed: $state")
+        if (intent.action != TelephonyManager.ACTION_PHONE_STATE_CHANGED) {
+            return
+        }
 
-            // Attempt to get the incoming number
-            val incomingNumber = getIncomingNumber(context, intent)
-            Log.d("CallReceiver", "Incoming number: $incomingNumber")
+        val state = intent.getStringExtra(TelephonyManager.EXTRA_STATE)
+        val incomingNumber = intent.getStringExtra(TelephonyManager.EXTRA_INCOMING_NUMBER)
+        Log.d(TAG, "Phone state changed: $state, Incoming number: $incomingNumber")
 
-            if (state == TelephonyManager.EXTRA_STATE_RINGING && incomingNumber != null) {
-                val sharedPreferences = context.getSharedPreferences("DND_PREFS", Context.MODE_PRIVATE)
-                val isDndActive = sharedPreferences.getBoolean("DND_ACTIVE", false)
-                Log.d("CallReceiver", "Is DND active: $isDndActive")
-
-                if (isDndActive) {
-                    Log.d("CallReceiver", "Incoming call from: $incomingNumber")
-                    sendSms(context, incomingNumber)
-                }
+        if (state == TelephonyManager.EXTRA_STATE_RINGING) {
+            if (!incomingNumber.isNullOrEmpty()) {
+                handleIncomingCall(context, incomingNumber)
+            } else {
+                // Use a delay to allow time for the call log to be updated as a fallback
+                Handler(Looper.getMainLooper()).postDelayed({
+                    val fallbackNumber = getLastIncomingCallNumber(context)
+                    if (!fallbackNumber.isNullOrEmpty()) {
+                        handleIncomingCall(context, fallbackNumber)
+                    } else {
+                        Log.d(TAG, "Fallback number is null or empty. SMS will not be sent.")
+                    }
+                }, 500) // Reduced delay to 500 ms for faster SMS handling
             }
         }
     }
 
-    private fun getIncomingNumber(context: Context, intent: Intent): String? {
-        var incomingNumber = intent.getStringExtra(TelephonyManager.EXTRA_INCOMING_NUMBER)
+    private fun handleIncomingCall(context: Context, incomingNumber: String?) {
+        Log.d(TAG, "Handling incoming number: $incomingNumber")
 
-        if (incomingNumber == null) {
-            Log.d("CallReceiver", "Incoming number is null, attempting to retrieve from Call Log")
-            if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_CALL_LOG) == PermissionChecker.PERMISSION_GRANTED) {
-                incomingNumber = getLastIncomingCallNumber(context)
+        if (!incomingNumber.isNullOrEmpty()) {
+            val stateManager = StateManager(context)
+            val isDndActive = stateManager.isStateActive
+            Log.d(TAG, "Is DND active: $isDndActive")
+
+            if (isDndActive) {
+                Log.d(TAG, "DND is active. Preparing to send SMS to: $incomingNumber")
+                val smsMessage = stateManager.getStoredSmsMessage()
+                sendSms(context, incomingNumber, smsMessage)
             } else {
-                Log.d("CallReceiver", "READ_CALL_LOG permission not granted. Requesting permission.")
-                showPermissionRequestNotification(context)
+                Log.d(TAG, "DND is not active, SMS will not be sent")
             }
+        } else {
+            Log.d(TAG, "Incoming number is null or empty, SMS will not be sent")
         }
-
-        return incomingNumber
     }
 
     private fun getLastIncomingCallNumber(context: Context): String? {
-        val contentResolver = context.contentResolver
-        val cursor = contentResolver.query(
-            CallLog.Calls.CONTENT_URI,
-            arrayOf(CallLog.Calls.NUMBER, CallLog.Calls.TYPE, CallLog.Calls.DATE),
-            "${CallLog.Calls.TYPE} = ?",
-            arrayOf(CallLog.Calls.INCOMING_TYPE.toString()),
-            "${CallLog.Calls.DATE} DESC"
-        )
-
-        var incomingNumber: String? = null
-        cursor?.use {
-            val numberIndex = it.getColumnIndex(CallLog.Calls.NUMBER)
-            val dateIndex = it.getColumnIndex(CallLog.Calls.DATE)
-
-            if (numberIndex != -1 && dateIndex != -1 && it.moveToFirst()) {
-                incomingNumber = it.getString(numberIndex)
-                val callDate = it.getLong(dateIndex)
-                Log.d("CallReceiver", "Retrieved call from Call Log - Number: $incomingNumber, Date: $callDate")
-            } else {
-                Log.d("CallReceiver", "Column index not found or no call log entry found.")
-            }
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALL_LOG) != PackageManager.PERMISSION_GRANTED) {
+            Log.d(TAG, "READ_CALL_LOG permission not granted.")
+            return null
         }
+
+        val contentResolver = context.contentResolver
+        var cursor: Cursor? = null
+        var incomingNumber: String? = null
+
+        try {
+            cursor = contentResolver.query(
+                CallLog.Calls.CONTENT_URI,
+                arrayOf(CallLog.Calls.NUMBER, CallLog.Calls.TYPE, CallLog.Calls.DATE),
+                "${CallLog.Calls.TYPE} = ? AND ${CallLog.Calls.DATE} > ?",
+                arrayOf(CallLog.Calls.INCOMING_TYPE.toString(), (System.currentTimeMillis() - 20000).toString()),
+                "${CallLog.Calls.DATE} DESC"
+            )
+
+            cursor?.use {
+                if (it.moveToFirst()) {
+                    val numberIndex = it.getColumnIndex(CallLog.Calls.NUMBER)
+                    if (numberIndex != -1) {
+                        incomingNumber = it.getString(numberIndex)
+                        Log.d(TAG, "Retrieved call from Call Log - Number: $incomingNumber")
+                    } else {
+                        Log.d(TAG, "NUMBER column not found in Call Log.")
+                    }
+                } else {
+                    Log.d(TAG, "No recent incoming calls found in Call Log.")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error querying call log", e)
+        } finally {
+            cursor?.close()
+        }
+
         return incomingNumber
     }
 
-    private fun sendSms(context: Context, phoneNumber: String) {
-        val sharedPreferences = context.getSharedPreferences("DND_PREFS", Context.MODE_PRIVATE)
-        val customMessage = sharedPreferences.getString("SMS_MESSAGE", context.getString(R.string.default_sms_message))
+    private fun sendSms(context: Context, phoneNumber: String, message: String) {
+        if (message.isBlank()) {
+            Log.d(TAG, "SMS message is blank. SMS will not be sent.")
+            return
+        }
 
-        if (customMessage.isNullOrEmpty()) {
-            Log.d("CallReceiver", "No SMS message to send")
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
+            Log.d(TAG, "SEND_SMS permission not granted.")
             return
         }
 
         try {
-            val smsManager = context.getSystemService(SmsManager::class.java)
-            Log.d("CallReceiver", "Attempting to send SMS to $phoneNumber with message: $customMessage")
-            smsManager.sendTextMessage(phoneNumber, null, customMessage, null, null)
-            Log.d("CallReceiver", "SMS sent to $phoneNumber")
+            val smsManager = SmsManager.getDefault()
+            Log.d(TAG, "Attempting to send SMS to $phoneNumber with message: $message")
+            smsManager.sendTextMessage(phoneNumber, null, message, null, null)
+            Log.d(TAG, "SMS sent to $phoneNumber successfully.")
         } catch (e: Exception) {
-            Log.e("CallReceiver", "Failed to send SMS", e)
+            Log.e(TAG, "Failed to send SMS to $phoneNumber", e)
         }
-    }
-
-    private fun showPermissionRequestNotification(context: Context) {
-        // Notification logic to request permission
     }
 }

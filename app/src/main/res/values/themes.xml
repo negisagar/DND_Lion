@@ -1,5 +1,50 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Base application theme -->
+    <style name="Theme.DNDLion" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- Your existing theme attributes -->
+        <!-- ... -->
+    </style>
 
-    <style name="Theme.DNDLion" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- Custom TimePicker Theme -->
+    <style name="CustomTimePickerTheme" parent="ThemeOverlay.Material3.MaterialTimePicker">
+        <item name="colorPrimary">@color/timepicker_primary</item>
+        <item name="colorAccent">@color/timepicker_accent</item>
+        <item name="colorOnPrimary">@color/timepicker_text</item>
+        <item name="colorOnSurface">@color/timepicker_text</item>
+        <item name="android:background">@color/timepicker_background</item>
+        <item name="android:textColorPrimary">@color/timepicker_text</item>
+        <item name="materialTimePickerTitleStyle">@style/TimePicker.Title</item>
+        <item name="materialClockStyle">@style/TimePicker.Clock</item>
+        <item name="materialButtonOutlinedStyle">@style/TimePicker.Button</item>
+        <item name="chipStyle">@style/TimePicker.Chip</item>
+        <item name="imageButtonStyle">@style/TimePicker.ImageButton</item>
+    </style>
+
+    <!-- TimePicker Sub-Styles -->
+    <style name="TimePicker.Title" parent="TextAppearance.Material3.HeadlineMedium">
+        <item name="android:textColor">@color/timepicker_text</item>
+    </style>
+
+    <style name="TimePicker.Clock" parent="Widget.Material3.MaterialTimePicker.Clock">
+        <item name="clockFaceBackgroundColor">@color/timepicker_background</item>
+        <item name="clockHandColor">@color/timepicker_primary</item>
+        <item name="android:textColor">@color/timepicker_text</item>
+    </style>
+
+    <style name="TimePicker.Button" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="backgroundTint">@color/timepicker_primary</item>
+        <item name="android:textColor">@color/button_text</item>
+        <item name="strokeWidth">0dp</item>
+    </style>
+
+    <style name="TimePicker.Chip" parent="Widget.Material3.Chip.Suggestion">
+        <item name="chipBackgroundColor">@color/chip_background</item>
+        <item name="android:textColor">@color/chip_text</item>
+        <item name="android:textAppearance">@style/TextAppearance.Material3.BodyLarge</item>
+    </style>
+
+    <style name="TimePicker.ImageButton" parent="Widget.Material3.MaterialTimePicker.ImageButton">
+        <item name="iconTint">@color/timepicker_primary</item>
+    </style>
 </resources>
