@@ -12,6 +12,10 @@ import android.database.Cursor
 import android.os.Handler
 import android.os.Looper
 import android.content.pm.PackageManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 class DndModeReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -45,11 +49,13 @@ class DndModeReceiver : BroadcastReceiver() {
                     else android.app.NotificationManager.INTERRUPTION_FILTER_ALL
                 )
 
-                // Use Constants.PreferenceKeys for SharedPreferences
-                val sharedPreferences = context.getSharedPreferences(Constants.PreferenceKeys.PREFS_NAME, Context.MODE_PRIVATE)
-                with(sharedPreferences.edit()) {
-                    putBoolean(Constants.PreferenceKeys.KEY_IS_ACTIVE, enable)
-                    apply()
+                // Update isActive state in DataStore
+                CoroutineScope(Dispatchers.IO).launch {
+                    val current = DataStoreManager.getSettingsFlow(context).first()
+                    DataStoreManager.updateSettings(
+                        context,
+                        current.copy(isActive = enable)
+                    )
                 }
 
                 if (enable) {

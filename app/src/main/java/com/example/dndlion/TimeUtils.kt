@@ -50,4 +50,17 @@ object TimeUtils {
             else -> throw IllegalArgumentException("Invalid day: $day")
         }
     }
+    
+    fun getDayName(dayOfWeek: Int): String {
+        return when (dayOfWeek) {
+            Calendar.MONDAY -> "Mon"
+            Calendar.TUESDAY -> "Tue"
+            Calendar.WEDNESDAY -> "Wed"
+            Calendar.THURSDAY -> "Thu"
+            Calendar.FRIDAY -> "Fri"
+            Calendar.SATURDAY -> "Sat"
+            Calendar.SUNDAY -> "Sun"
+            else -> throw IllegalArgumentException("Invalid day of week: $dayOfWeek")
+        }
+    }
 }

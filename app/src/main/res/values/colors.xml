@@ -134,4 +134,11 @@
     <color name="timepicker_accent">#FF4081</color>
 
 
+    <!-- Splash Screen Colors -->
+    <color name="splash_background">#D8BBA7</color>
+    <color name="splash_icon_background">#D8BBA7</color>
+    
+    <!-- Icon Background -->
+    <color name="ic_launcher_background">#D8BBA7</color>
+
 </resources>

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "796000096075",
+    "project_id": "dnd-lion",
+    "storage_bucket": "dnd-lion.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:796000096075:android:e7ecb64faa6e4a433f62ce",
+        "android_client_info": {
+          "package_name": "com.example.dndlion"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA5y2zTPzqpsTVNo5WV0ghF_0mCma_ueQ4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

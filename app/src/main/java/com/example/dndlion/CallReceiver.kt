@@ -13,6 +13,8 @@ import android.database.Cursor
 import android.os.Handler
 import android.os.Looper
 import android.content.pm.PackageManager
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 class CallReceiver : BroadcastReceiver() {
     private val TAG = "CallReceiver" // Consider moving to Constants.LogTags.CALL_RECEIVER
@@ -47,16 +49,24 @@ class CallReceiver : BroadcastReceiver() {
         Log.d(TAG, "Handling incoming number: $incomingNumber")
 
         if (!incomingNumber.isNullOrEmpty()) {
-            val stateManager = StateManager(context)
-            val isDndActive = stateManager.isStateActive
-            Log.d(TAG, "Is DND active: $isDndActive")
+            // Using CoroutineScope to read DataStore since it's a suspending function
+            val goAsync = goAsync()
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                try {
+                    val settings = DataStoreManager.getSettingsFlow(context).first()
+                    val isDndActive = settings.isActive
+                    Log.d(TAG, "Is DND active: $isDndActive")
 
-            if (isDndActive) {
-                Log.d(TAG, "DND is active. Preparing to send SMS to: $incomingNumber")
-                val smsMessage = stateManager.getStoredSmsMessage()
-                sendSms(context, incomingNumber, smsMessage)
-            } else {
-                Log.d(TAG, "DND is not active, SMS will not be sent")
+                    if (isDndActive) {
+                        Log.d(TAG, "DND is active. Preparing to send SMS to: $incomingNumber")
+                        val smsMessage = settings.smsMessage
+                        sendSms(context, incomingNumber, smsMessage)
+                    } else {
+                        Log.d(TAG, "DND is not active, SMS will not be sent")
+                    }
+                } finally {
+                    goAsync.finish()
+                }
             }
         } else {
             Log.d(TAG, "Incoming number is null or empty, SMS will not be sent")
@@ -70,11 +80,10 @@ class CallReceiver : BroadcastReceiver() {
         }
 
         val contentResolver = context.contentResolver
-        var cursor: Cursor? = null
         var incomingNumber: String? = null
 
         try {
-            cursor = contentResolver.query(
+            val cursor = contentResolver.query(
                 CallLog.Calls.CONTENT_URI,
                 arrayOf(CallLog.Calls.NUMBER, CallLog.Calls.TYPE, CallLog.Calls.DATE),
                 "${CallLog.Calls.TYPE} = ? AND ${CallLog.Calls.DATE} > ?",
@@ -88,17 +97,14 @@ class CallReceiver : BroadcastReceiver() {
                     if (numberIndex != -1) {
                         incomingNumber = it.getString(numberIndex)
                         Log.d(TAG, "Retrieved call from Call Log - Number: $incomingNumber")
-                    } else {
-                        Log.d(TAG, "NUMBER column not found in Call Log.")
                     }
                 } else {
                     Log.d(TAG, "No recent incoming calls found in Call Log.")
                 }
+                Unit // Ensure block returns Unit
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error querying call log", e)
-        } finally {
-            cursor?.close()
         }
 
         return incomingNumber

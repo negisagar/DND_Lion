@@ -18,9 +18,47 @@ class AlarmScheduler(private val context: Context) {
             // Cancel any existing alarms first
             cancelExistingAlarms(days)
 
+            val now = Calendar.getInstance()
+            val todayDayOfWeek = now.get(Calendar.DAY_OF_WEEK)
+            val todayDayName = TimeUtils.getDayName(todayDayOfWeek)
+            
+            // Check if we're currently in an active DND window
+            if (days.contains(todayDayName)) {
+                if (isCurrentlyInDndWindow(startTime, endTime)) {
+                    Log.d(TAG, "Currently in DND window - enabling DND immediately")
+                    enableDndModeNow()
+                    
+                    // Schedule the end alarm for today
+                    val adjustedEndTime = Calendar.getInstance().apply {
+                        set(Calendar.HOUR_OF_DAY, endTime.get(Calendar.HOUR_OF_DAY))
+                        set(Calendar.MINUTE, endTime.get(Calendar.MINUTE))
+                        set(Calendar.SECOND, 0)
+                        set(Calendar.MILLISECOND, 0)
+                        
+                        // If end time is before start time (overnight), add a day
+                        if (endTime.get(Calendar.HOUR_OF_DAY) < startTime.get(Calendar.HOUR_OF_DAY) ||
+                            (endTime.get(Calendar.HOUR_OF_DAY) == startTime.get(Calendar.HOUR_OF_DAY) &&
+                             endTime.get(Calendar.MINUTE) < startTime.get(Calendar.MINUTE))) {
+                            add(Calendar.DAY_OF_YEAR, 1)
+                        }
+                    }
+                    
+                    val endIntent = createPendingIntent(Constants.Actions.ACTION_END_DND, todayDayName.hashCode() + 1)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
+                        Log.e(TAG, "Cannot schedule exact alarms - permission not granted")
+                    } else {
+                        alarmManager.setAlarmClock(
+                            AlarmManager.AlarmClockInfo(adjustedEndTime.timeInMillis, null),
+                            endIntent
+                        )
+                        Log.d(TAG, "Scheduled end alarm for today: ${adjustedEndTime.time}")
+                    }
+                }
+            }
+
+            // Schedule future alarms for all selected days
             for (day in days) {
-                // 1) Build the correct calendars for each day’s start/end
-                val dayOfWeek = TimeUtils.getDayOfWeek(day) // e.g. "Mon" -> Calendar.MONDAY
+                val dayOfWeek = TimeUtils.getDayOfWeek(day)
 
                 val adjustedStartTime = Calendar.getInstance().apply {
                     set(Calendar.DAY_OF_WEEK, dayOfWeek)
@@ -29,14 +67,12 @@ class AlarmScheduler(private val context: Context) {
                     set(Calendar.SECOND, 0)
                     set(Calendar.MILLISECOND, 0)
 
-                    // If it's still in the past, jump forward 1 week
+                    // If it's in the past (including today if we already passed it), jump forward 1 week
                     if (before(Calendar.getInstance())) {
                         add(Calendar.WEEK_OF_YEAR, 1)
                     }
                 }
 
-                // ------ End Time ------
-                // Do the same for the end time
                 val adjustedEndTime = Calendar.getInstance().apply {
                     set(Calendar.DAY_OF_WEEK, dayOfWeek)
                     set(Calendar.HOUR_OF_DAY, endTime.get(Calendar.HOUR_OF_DAY))
@@ -45,20 +81,24 @@ class AlarmScheduler(private val context: Context) {
                     set(Calendar.MILLISECOND, 0)
                 }
 
-                // 2) If user’s endTime is *before* user’s startTime on the same day, assume overnight → add 1 day
-                if (adjustedEndTime.before(adjustedStartTime)) {
+                // If end time is before start time (overnight), add 1 day
+                if (adjustedEndTime.before(adjustedStartTime) || 
+                    (endTime.get(Calendar.HOUR_OF_DAY) < startTime.get(Calendar.HOUR_OF_DAY))) {
                     adjustedEndTime.add(Calendar.DAY_OF_YEAR, 1)
                 }
+                
+                // If end time is in the past, move to next week
+                if (adjustedEndTime.before(Calendar.getInstance())) {
+                    adjustedEndTime.add(Calendar.WEEK_OF_YEAR, 1)
+                    adjustedStartTime.add(Calendar.WEEK_OF_YEAR, 1)
+                }
 
-                // 3) Subtract the schedule-ahead offset from both
+                // Subtract the schedule-ahead offset
                 adjustedStartTime.timeInMillis -= SCHEDULE_AHEAD_TIME
-                adjustedEndTime.timeInMillis -= SCHEDULE_AHEAD_TIME
 
-                // 4) Create PendingIntents
                 val startIntent = createPendingIntent(Constants.Actions.ACTION_START_DND, day.hashCode())
                 val endIntent = createPendingIntent(Constants.Actions.ACTION_END_DND, day.hashCode() + 1)
 
-                // 5) Check for exact alarm permission on Android S+
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     if (!alarmManager.canScheduleExactAlarms()) {
                         Log.e(TAG, "Cannot schedule exact alarms - permission not granted")
@@ -66,7 +106,6 @@ class AlarmScheduler(private val context: Context) {
                     }
                 }
 
-                // 6) Schedule the alarms
                 alarmManager.setAlarmClock(
                     AlarmManager.AlarmClockInfo(adjustedStartTime.timeInMillis, null),
                     startIntent
@@ -82,6 +121,51 @@ class AlarmScheduler(private val context: Context) {
         } catch (e: Exception) {
             Log.e(TAG, "Error scheduling DND mode", e)
             return false
+        }
+    }
+    
+    /**
+     * Check if current time is within the DND window.
+     */
+    private fun isCurrentlyInDndWindow(startTime: Calendar, endTime: Calendar): Boolean {
+        val now = Calendar.getInstance()
+        val currentHour = now.get(Calendar.HOUR_OF_DAY)
+        val currentMinute = now.get(Calendar.MINUTE)
+        val currentTotalMinutes = currentHour * 60 + currentMinute
+        
+        val startHour = startTime.get(Calendar.HOUR_OF_DAY)
+        val startMinute = startTime.get(Calendar.MINUTE)
+        val startTotalMinutes = startHour * 60 + startMinute
+        
+        val endHour = endTime.get(Calendar.HOUR_OF_DAY)
+        val endMinute = endTime.get(Calendar.MINUTE)
+        val endTotalMinutes = endHour * 60 + endMinute
+        
+        return if (startTotalMinutes <= endTotalMinutes) {
+            // Same day window (e.g., 10:00 AM to 6:00 PM)
+            currentTotalMinutes in startTotalMinutes..endTotalMinutes
+        } else {
+            // Overnight window (e.g., 10:00 PM to 7:00 AM)
+            currentTotalMinutes >= startTotalMinutes || currentTotalMinutes <= endTotalMinutes
+        }
+    }
+    
+    /**
+     * Immediately enables DND mode on the device.
+     */
+    fun enableDndModeNow() {
+        try {
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                if (notificationManager.isNotificationPolicyAccessGranted) {
+                    notificationManager.setInterruptionFilter(android.app.NotificationManager.INTERRUPTION_FILTER_NONE)
+                    Log.d(TAG, "DND mode enabled immediately")
+                } else {
+                    Log.w(TAG, "Cannot enable DND - notification policy access not granted")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error enabling DND mode", e)
         }
     }
 
@@ -150,9 +234,29 @@ class AlarmScheduler(private val context: Context) {
     fun stopDndMode(days: Set<String>) {
         try {
             cancelExistingAlarms(days)
-            Log.d(TAG, "Successfully cancelled all alarms")
+            disableDndModeNow()
+            Log.d(TAG, "Successfully cancelled all alarms and disabled DND")
         } catch (e: Exception) {
             Log.e(TAG, "Error stopping DND mode", e)
+        }
+    }
+
+    /**
+     * Immediately disables DND mode on the device.
+     */
+    fun disableDndModeNow() {
+        try {
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                if (notificationManager.isNotificationPolicyAccessGranted) {
+                    notificationManager.setInterruptionFilter(android.app.NotificationManager.INTERRUPTION_FILTER_ALL)
+                    Log.d(TAG, "DND mode disabled immediately")
+                } else {
+                    Log.w(TAG, "Cannot disable DND - notification policy access not granted")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error disabling DND mode", e)
         }
     }
 }

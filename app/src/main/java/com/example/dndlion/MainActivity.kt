@@ -7,99 +7,78 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.util.Log
+import android.view.animation.AccelerateDecelerateInterpolator
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.lifecycle.lifecycleScope
+import com.example.dndlion.ui.screens.MainScreen
+import com.example.dndlion.ui.theme.DNDLionTheme
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
     private val TAG = Constants.LogTags.MAIN_ACTIVITY
 
     // Managers and Utilities
-    private lateinit var views: ViewHolder
-    private lateinit var stateManager: StateManager
+    private val viewModel: DndViewModel by viewModels()
     private lateinit var alarmScheduler: AlarmScheduler
     private lateinit var permissionHandler: PermissionHandler
-    private lateinit var uiManager: MainActivityUI
-
-    private val uiUpdateReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            Log.d(TAG, "Received broadcast: ${intent?.action}")
-            when (intent?.action) {
-                Constants.Actions.ACTION_UPDATE_UI -> {
-                    Log.d(TAG, "Received UI update broadcast")
-                    uiManager.resetUIState()
-
-                    // Only clear state if DND is being deactivated
-                    if (!stateManager.isStateActive) {
-                        stateManager.clearState()
-                    }
-                }
-            }
-        }
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Install splash screen before super.onCreate
+        val splashScreen = installSplashScreen()
+        
+        // Add exit animation
+        splashScreen.setOnExitAnimationListener { splashScreenView ->
+            // Scale up and fade out animation
+            splashScreenView.iconView?.animate()
+                ?.scaleX(1.5f)
+                ?.scaleY(1.5f)
+                ?.alpha(0f)
+                ?.setDuration(300L)
+                ?.setInterpolator(AccelerateDecelerateInterpolator())
+                ?.withEndAction {
+                    splashScreenView.remove()
+                }
+                ?.start()
+            
+            // Fade out the background
+            splashScreenView.view.animate()
+                .alpha(0f)
+                .setDuration(300L)
+                .setInterpolator(AccelerateDecelerateInterpolator())
+                .start()
+        }
+        
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
+        enableEdgeToEdge()
         Log.d(TAG, "onCreate started")
 
-        // Initialize managers and setup app
+        // Initialize managers
         initializeManagers()
 
-        // Register UI update receiver after initializing managers
-        registerUiReceiver()
-
+        setContent {
+            DNDLionTheme {
+                MainScreen(
+                    viewModel = viewModel,
+                    alarmScheduler = alarmScheduler,
+                    permissionHandler = permissionHandler
+                )
+            }
+        }
+        
         setupApplication()
         handleIntent(intent)
-
-        // Restore previous state if exists
-        restorePreviousState()
-    }
-
-    private fun registerUiReceiver() {
-        try {
-            val filter = IntentFilter(Constants.Actions.ACTION_UPDATE_UI)
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                registerReceiver(uiUpdateReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
-            } else {
-                @Suppress("UnspecifiedRegisterReceiverFlag") // Suppressing warning for older Android versions
-                registerReceiver(uiUpdateReceiver, filter)
-            }
-            Log.d(TAG, "UI receiver registered successfully")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error registering UI receiver", e)
-        }
-    }
-
-    private fun restorePreviousState() {
-        try {
-            if (stateManager.hasValidState()) {
-                Log.d(TAG, "Restoring previous state")
-                stateManager.restoreState(views)
-
-                // If the schedule was active, update UI accordingly
-                if (stateManager.isStateActive) {
-                    uiManager.updateUIForActiveState()
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error restoring previous state", e)
-        }
     }
 
     private fun initializeManagers() {
         try {
             Log.d(TAG, "Initializing managers")
-            views = ViewHolder(this)
-            stateManager = StateManager(this)
             alarmScheduler = AlarmScheduler(this)
             permissionHandler = PermissionHandler(this)
-
-            uiManager = MainActivityUI(
-                activity = this,
-                views = views,
-                stateManager = stateManager,
-                alarmScheduler = alarmScheduler,
-                permissionHandler = permissionHandler
-            )
             Log.d(TAG, "Managers initialized successfully")
         } catch (e: Exception) {
             Log.e(TAG, "Error initializing managers", e)
@@ -109,7 +88,6 @@ class MainActivity : AppCompatActivity() {
     private fun setupApplication() {
         try {
             Log.d(TAG, "Setting up application")
-            uiManager.setupUI()
             checkRequiredPermissions()
             Log.d(TAG, "Application setup completed")
         } catch (e: Exception) {
@@ -119,9 +97,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun checkRequiredPermissions() {
         Log.d(TAG, "Checking required permissions")
-        permissionHandler.checkAndRequestPermissions()
+        // We let the UI handle the interactive request, but we can do an initial check here if needed
+        // For now, MainScreen handles the interactive part.
+        // We might want to check exact alarm permission though
         permissionHandler.checkAndRequestAlarmPermission()
-        checkDndPermission()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -148,19 +127,21 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun restoreScheduleAfterBoot() {
-        if (stateManager.isStateActive) {
-            Log.d(TAG, "Restoring schedule after boot")
-            val startTime = stateManager.getStoredStartTime()
-            val endTime = stateManager.getStoredEndTime()
-            val days = stateManager.getStoredDays()
-
-            if (!startTime.isNullOrEmpty() && !endTime.isNullOrEmpty() && days.isNotEmpty()) {
-                val startCalendar = TimeUtils.parseTime(startTime)
-                val endCalendar = TimeUtils.parseTime(endTime)
-
-                if (startCalendar != null && endCalendar != null) {
-                    alarmScheduler.scheduleDndMode(startCalendar, endCalendar, days)
-                    Log.d(TAG, "Schedule restored successfully")
+        lifecycleScope.launch {
+            viewModel.settings.collectLatest { settings ->
+                if (settings.isActive) {
+                    Log.d(TAG, "Restoring schedule after boot")
+                    val startTime = settings.startTime
+                    val endTime = settings.endTime
+                    val days = settings.selectedDays
+                    if (startTime.isNotEmpty() && endTime.isNotEmpty() && days.isNotEmpty()) {
+                        val startCalendar = TimeUtils.parseTime(startTime)
+                        val endCalendar = TimeUtils.parseTime(endTime)
+                        if (startCalendar != null && endCalendar != null) {
+                            alarmScheduler.scheduleDndMode(startCalendar, endCalendar, days)
+                            Log.d(TAG, "Schedule restored successfully")
+                        }
+                    }
                 }
             }
         }
@@ -182,12 +163,8 @@ class MainActivity : AppCompatActivity() {
                     Log.d(TAG, "All permissions granted")
                 } else {
                     Log.w(TAG, "Some permissions were denied")
-                    permissionHandler.showPermissionExplanationDialog(
-                        "Permissions Required",
-                        Constants.Messages.PERMISSION_REQUIRED
-                    ) {
-                        permissionHandler.checkAndRequestPermissions()
-                    }
+                    // The UI will handle showing specific rationale if needed via PermissionHandler
+                    // or we can show a toast here
                 }
             }
         }
@@ -196,52 +173,15 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         Log.d(TAG, "onResume")
-        checkDndPermission()
-    }
-
-    private fun checkDndPermission() {
-        Log.d(TAG, "Checking DND permission")
-        if (!permissionHandler.isNotificationPolicyAccessGranted()) {
-            Log.d(TAG, "DND permission not granted, showing explanation")
-            permissionHandler.showPermissionExplanationDialog(
-                title = "DND Permission Required",
-                message = Constants.Messages.DND_PERMISSION_REQUIRED,
-                onPositiveClick = { permissionHandler.requestNotificationPolicyAccess() }
-            )
-        } else {
-            Log.d(TAG, "DND permission already granted")
-        }
-    }
-
-    override fun onSaveInstanceState(outState: Bundle) {
-        super.onSaveInstanceState(outState)
-        Log.d(TAG, "Saving instance state")
-        try {
-            stateManager.saveState(
-                startTime = views.startTimeInput.text.toString(),
-                endTime = views.endTimeInput.text.toString(),
-                selectedDays = views.getSelectedDays(),
-                smsMessage = views.smsMessageInput.text.toString(),
-                isActive = views.stopDndButton.isEnabled
-            )
-            Log.d(TAG, "Instance state saved successfully")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error saving instance state", e)
-        }
+        // Check permissions again in case user granted them in settings
     }
 
     override fun onDestroy() {
         super.onDestroy()
         Log.d(TAG, "onDestroy")
-        try {
-            unregisterReceiver(uiUpdateReceiver)
-            Log.d(TAG, "Successfully unregistered UI update receiver")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error unregistering receiver", e)
-        }
     }
 
     companion object {
-        private const val INITIAL_DELAY = 1000L // 1 second delay for certain operations if needed
+        private const val INITIAL_DELAY = 1000L 
     }
 }
